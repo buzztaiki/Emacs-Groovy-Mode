@@ -495,28 +495,36 @@ need for `java-font-lock-extra-types'.")
     (setq ad-return-value (groovy-transform-syntax ad-return-value))))
 
 (defun groovy-transform-syntax (syntax)
+  (setq syntax (groovy-transform-label-syntax syntax))
+  (setq syntax (groovy-transform-*-cont-syntax syntax))
+  syntax)
+
+(defun groovy-transform-label-syntax (syntax)
   (if (groovy-is-label syntax)
       (let ((anchor-points (groovy-named-parameter-list-anchor-points)))
         (if anchor-points
             `((arglist-cont-nonempty ,(car anchor-points) ,(cdr anchor-points)))
           syntax))
-    (save-excursion
-      (let* ((ankpos (progn
-                       (beginning-of-line)
-                       (c-backward-syntactic-ws)
-                       (beginning-of-line)
-                       (c-forward-syntactic-ws)
-                       (point))) ; position to previous non-blank line
-             (curelem (c-langelem-sym (car syntax))))
-        (end-of-line)
-        (cond
-         ((and (eq 'statement-cont curelem)
-               (groovy-at-vsemi-p)) ; if there is a virtual semi there then make it a statement
-          `((statement ,ankpos)))
-         ((and (eq 'topmost-intro-cont curelem)
-               (groovy-at-vsemi-p)) ; if there is a virtual semi there then make it a top-most-intro
-          `((topmost-intro ,ankpos)))
-         (t syntax))))))
+    syntax))
+
+(defun groovy-transform-*-cont-syntax (syntax)
+  (save-excursion
+    (let* ((ankpos (progn
+                     (beginning-of-line)
+                     (c-backward-syntactic-ws)
+                     (beginning-of-line)
+                     (c-forward-syntactic-ws)
+                     (point)))   ; position to previous non-blank line
+           (curelem (c-langelem-sym (car syntax))))
+      (end-of-line)
+      (cond
+       ((and (eq 'statement-cont curelem)
+             (groovy-at-vsemi-p)) ; if there is a virtual semi there then make it a statement
+        `((statement ,ankpos)))
+       ((and (eq 'topmost-intro-cont curelem)
+             (groovy-at-vsemi-p)) ; if there is a virtual semi there then make it a top-most-intro
+        `((topmost-intro ,ankpos)))
+       (t syntax)))))
 
 ;; This disables bracelists, as most of the time in groovy they are closures
 ;; We need to check we are currently in groovy mode
