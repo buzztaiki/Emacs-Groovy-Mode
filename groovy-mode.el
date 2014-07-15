@@ -70,6 +70,8 @@
 ;;; Code:
 
 (require 'cc-mode)
+(eval-when-compile
+  (require 'cl))
 
 ;; CSharp mode comment says: These are only required at compile time to get the sources for the language
 ;; constants.  (The cc-fonts require and the font-lock related constants could additionally be put inside an
@@ -454,11 +456,7 @@ need for `java-font-lock-extra-types'.")
   (eq major-mode 'groovy-mode))
 
 (defun groovy-is-label (the-list)
-  (let ((ret nil))
-    (dolist (elt the-list)
-      (if (eq 'label (car elt))
-	  (setq ret t)))
-    ret))
+  (assq 'label the-list))
 
 (defun groovy-backtrack-open-paren ()
   (let ((counter 0))
@@ -478,14 +476,22 @@ need for `java-font-lock-extra-types'.")
   (save-excursion
     (beginning-of-line)
     (c-backward-syntactic-ws)
-    (if (equal ?, (preceding-char))
-	(let* ((second-anchor (progn (groovy-backtrack-open-paren)
-				     (point)))
-	       (first-anchor (progn (beginning-of-line)
-				    (c-forward-syntactic-ws)
-				    (point))))
-	  (cons first-anchor second-anchor))
-      nil)))
+    (let ((cont-label-p (eq ?, (preceding-char)))
+          (second-anchor (progn (groovy-backtrack-open-paren)
+                                (point)))
+          (top-label (save-excursion (forward-char)
+                                     (c-forward-syntactic-ws)
+                                     (point)))
+          (first-anchor (progn (beginning-of-line)
+                               (c-forward-syntactic-ws)
+                               (point))))
+      (and (save-excursion (goto-char first-anchor)
+                           (eq (char-after) ?\[))
+           (list first-anchor second-anchor cont-label-p top-label)))))
+
+(defun groovy-sameline-p (pos1 pos2)
+  (eq (save-excursion (goto-char pos1) (line-beginning-position))
+      (save-excursion (goto-char pos2) (line-beginning-position))))
 
 ;; use defadvice to override the syntactic type if we have a
 ;; statement-cont, see if previous line has a virtual semicolon and if
@@ -500,13 +506,26 @@ need for `java-font-lock-extra-types'.")
   syntax)
 
 (defun groovy-transform-label-syntax (syntax)
-  (if (groovy-is-label syntax)
-      (let ((anchor-points (groovy-named-parameter-list-anchor-points)))
-        (if anchor-points
-            `((arglist-cont-nonempty ,(car anchor-points) ,(cdr anchor-points)))
-          syntax))
-    syntax))
+  (let ((anchor-points (and (groovy-is-label syntax)
+                            (groovy-named-parameter-list-anchor-points))))
+    (if anchor-points
+        (groovy-transform-label-syntax-1 syntax anchor-points)
+      syntax)))
 
+(defun groovy-transform-label-syntax-1 (syntax anchor-points)
+  (cl-destructuring-bind (first-anchor second-anchor cont-label-p top-label)
+      anchor-points
+    (cl-flet ((transform (new-elem)
+                         (mapcar (lambda (elem)
+                                   (if (eq (c-langelem-sym elem) 'label) new-elem elem))
+                                 syntax)))
+      (cond ((groovy-sameline-p second-anchor top-label)
+             (transform `(arglist-cont-nonempty ,first-anchor ,second-anchor)))
+            (cont-label-p
+             `((arglist-cont ,top-label)))
+            (t
+             (transform `(arglist-intro ,first-anchor ,second-anchor)))))))
+  
 (defun groovy-transform-*-cont-syntax (syntax)
   (save-excursion
     (let* ((ankpos (progn
