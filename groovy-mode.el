@@ -500,6 +500,10 @@ need for `java-font-lock-extra-types'.")
   (when (is-groovy-mode)
     (setq ad-return-value (groovy-transform-syntax ad-return-value))))
 
+(defun groovy-orig-guess-basic-syntax ()
+  (or (funcall (ad-get-orig-definition 'c-guess-basic-syntax))
+      (c-guess-basic-syntax)))
+
 (defun groovy-transform-syntax (syntax)
   (setq syntax (groovy-transform-label-syntax syntax))
   (setq syntax (groovy-transform-*-cont-syntax syntax))
@@ -533,7 +537,11 @@ need for `java-font-lock-extra-types'.")
                      (c-backward-syntactic-ws)
                      (beginning-of-line)
                      (c-forward-syntactic-ws)
-                     (point)))   ; position to previous non-blank line
+                     (let* ((column (save-excursion
+                                      (goto-char (c-langelem-pos (car (groovy-orig-guess-basic-syntax))))
+                                      (current-column))))
+                       (move-to-column column)
+                       (point)))) ; position to previous non-blank line
            (curelem (c-langelem-sym (car syntax))))
       (end-of-line)
       (cond
