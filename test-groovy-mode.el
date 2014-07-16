@@ -57,5 +57,18 @@ e:f]")
   c:d,
   e:f]")))
 
+(ert-deftest groovy-indent-statement-after-def ()
+  (should (string= (test-groovy-indent-string
+                    "
+def foo = 10
+bar([1,
+2])
+baz")
+                   "
+def foo = 10
+bar([1,
+     2])
+baz")))
+
 (provide 'test-groovy-mode)
 ;;; test-groovy-mode.el ends here
